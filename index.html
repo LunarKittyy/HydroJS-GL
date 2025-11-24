@@ -1,0 +1,1107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>HydroJS GL - Fine Particles</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* --- GLOBAL STYLES --- */
+        body { margin: 0; overflow: hidden; background-color: #0f172a; color: white; font-family: 'Inter', sans-serif; }
+        canvas { display: block; width: 100vw; height: 100vh; cursor: crosshair; touch-action: none; }
+        
+        /* --- UI PANEL STYLING --- */
+        #controls {
+            position: absolute; top: 20px; left: 20px;
+            background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(12px);
+            padding: 12px; border-radius: 16px;
+            border: 1px solid rgba(255,255,255,0.1);
+            width: 300px; max-height: 85vh; overflow-y: auto;
+            box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.6); z-index: 10;
+            transition: transform 0.3s ease;
+        }
+        #controls.hidden-panel { transform: translateX(-340px); }
+        
+        #controls::-webkit-scrollbar { width: 4px; }
+        #controls::-webkit-scrollbar-thumb { background-color: #38bdf8; }
+
+        h1 { font-size: 1.1rem; font-weight: 700; color: #38bdf8; margin-bottom: 10px; }
+        .badge-gl { font-size: 0.6em; background: #38bdf8; color: #0f172a; padding: 2px 6px; border-radius: 4px; margin-left: 8px; vertical-align: middle; }
+
+        /* --- ACCORDION SECTIONS --- */
+        .section-header {
+            font-size: 0.75rem; text-transform: uppercase; color: #94a3b8;
+            margin-top: 8px; padding: 8px 4px; font-weight: 700;
+            cursor: pointer; display: flex; justify-content: space-between; align-items: center;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            transition: color 0.2s;
+        }
+        .section-header:hover { color: #f1f5f9; }
+        .section-header::after { content: '▼'; font-size: 0.6rem; transition: transform 0.3s; }
+        .section-header.collapsed::after { transform: rotate(-90deg); }
+        
+        .section-content {
+            overflow: hidden; transition: max-height 0.3s ease-out;
+            max-height: 800px;
+        }
+        .section-content.collapsed { max-height: 0; }
+
+        /* --- INPUT ELEMENTS --- */
+        .sub-header {
+            font-size: 0.65rem; text-transform: uppercase; letter-spacing: 1px;
+            color: #64748b; margin-top: 12px; margin-bottom: 6px; font-weight: bold;
+            border-bottom: 1px dashed rgba(255,255,255,0.1); padding-bottom: 2px;
+        }
+        
+        .slider-container { margin-bottom: 8px; padding-top: 4px; }
+        .slider-label { display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; color: #cbd5e1; margin-bottom: 4px; }
+        
+        input[type="range"] { -webkit-appearance: none; width: 100%; height: 4px; background: #334155; border-radius: 2px; outline: none; }
+        input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; background: #38bdf8; border-radius: 50%; cursor: pointer; transition: transform 0.1s; }
+        input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.2); }
+
+        .btn { background: #38bdf8; color: #0f172a; border: none; padding: 10px; border-radius: 8px; cursor: pointer; font-weight: 700; width: 100%; font-size: 0.9rem; margin-top: 10px; transition: background 0.2s; }
+        .btn:hover { background: #7dd3fc; }
+        .btn.secondary { background: #1e293b; color: #e2e8f0; border: 1px solid #334155; }
+
+        .tool-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+        .tool-btn { background: #334155; font-size: 0.8rem; padding: 8px; border-radius: 6px; text-align: center; cursor: pointer; border: 1px solid transparent; }
+        .tool-btn.selected { background: #38bdf8; color: #0f172a; font-weight: bold; }
+
+        .custom-select { width: 100%; background: #1e293b; color: #cbd5e1; border: 1px solid #334155; padding: 8px; border-radius: 6px; font-size: 0.85rem; outline: none; margin-bottom: 10px; }
+
+        .stat-box { font-family: monospace; font-size: 0.75rem; color: #94a3b8; margin-top: 12px; text-align: center; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1); }
+        
+        #menu-toggle {
+            position: absolute; top: 20px; right: 20px;
+            background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(4px);
+            color: white; border: 1px solid rgba(255,255,255,0.2);
+            width: 40px; height: 40px; border-radius: 8px;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; z-index: 20; font-size: 1.5rem;
+        }
+
+        .checkbox-row { display: flex; align-items: center; margin-top: 8px; font-size: 0.75rem; color: #94a3b8; }
+        .checkbox-row input { margin-right: 6px; width: auto; height: auto; }
+        .checkbox-row label { cursor: pointer; }
+        
+        .num-input {
+            background: rgba(0,0,0,0.2); border: 1px solid #334155;
+            color: #38bdf8; font-family: monospace; font-size: 0.8rem;
+            width: 50px; padding: 2px 4px; border-radius: 4px; text-align: right;
+        }
+    </style>
+</head>
+<body>
+
+    <button id="menu-toggle">≡</button>
+
+    <div id="controls">
+        <h1>HydroJS GL <span class="badge-gl">WEBGL2</span></h1>
+
+        <!-- Tools -->
+        <div class="section-header" onclick="toggleSection(this)">Tools</div>
+        <div class="section-content">
+            <div class="tool-grid">
+                <div class="tool-btn selected" id="tool-hand" onclick="setTool('hand')">Hand</div>
+                <div class="tool-btn" id="tool-ball" onclick="setTool('ball')">Ball</div>
+                <div class="tool-btn" id="tool-brush" onclick="setTool('brush')">Brush</div>
+            </div>
+            <button class="btn secondary" id="mode-btn" style="margin-top:0;">Hand Mode: Repel</button>
+            <div id="ball-controls" style="display:none; margin-top:8px;">
+                <div class="stat-box" style="border:none; padding:0;">Click canvas to spawn physics objects</div>
+            </div>
+        </div>
+
+        <!-- Visualization -->
+        <div class="section-header" onclick="toggleSection(this)">Visualization</div>
+        <div class="section-content">
+            
+            <!-- Sub-Section: Color & Style -->
+            <div class="sub-header">Color & Style</div>
+            <select id="visMode" class="custom-select">
+                <option value="1" selected>Standard (Pressure)</option>
+                <option value="0">Velocity (Heat)</option>
+            </select>
+            <div class="slider-container">
+                <div class="slider-label"><span>Hue Shift</span><span id="val-hue">0</span>°</div>
+                <input type="range" id="hue" min="0" max="360" step="1" value="0">
+            </div>
+            <div class="slider-container">
+                <div class="slider-label"><span>Opacity</span><span id="val-opacity">0.5</span></div>
+                <input type="range" id="opacity" min="0.05" max="1.0" step="0.05" value="0.5">
+            </div>
+            <div class="slider-container">
+                <div class="slider-label"><span>Particle Brightness</span><span id="val-brightness">50%</span></div>
+                <input type="range" id="brightness" min="0.0" max="5.0" step="0.1" value="2.5">
+            </div>
+            <div class="checkbox-row">
+                <input type="checkbox" id="bgGradient" checked>
+                <label for="bgGradient">Dynamic Background</label>
+            </div>
+
+            <!-- Sub-Section: Geometry -->
+            <div class="sub-header">Geometry</div>
+            <div class="slider-container">
+                <div class="slider-label"><span>Particle Size</span><span id="val-pSize">1.5</span></div>
+                <input type="range" id="pSize" min="0.5" max="4.0" step="0.1" value="1.5">
+            </div>
+            <div class="slider-container">
+                <div class="slider-label"><span>Glow Softness</span><span id="val-glow">0.1</span></div>
+                <input type="range" id="glow" min="0.0" max="0.45" step="0.01" value="0.1">
+            </div>
+            
+             <div class="checkbox-row">
+                <input type="checkbox" id="blobs">
+                <label for="blobs" style="color:#38bdf8; font-weight:bold;">Enable Liquid Blobs</label>
+            </div>
+
+            <!-- Sub-Section: Post-Processing -->
+            <div class="sub-header">Effects</div>
+            <div class="slider-container">
+                <div class="slider-label"><span>Trail Persistence</span><span id="val-trail">0.0</span></div>
+                <input type="range" id="trail" min="0.0" max="0.99" step="0.01" value="0.0">
+            </div>
+            <div class="checkbox-row">
+                <input type="checkbox" id="backlight" style="margin-right:8px;">
+                <label for="backlight">Enable Backlight (Fill Gaps)</label>
+            </div>
+            <div class="slider-container" id="backlight-slider-group" style="opacity: 0.5; pointer-events: none;">
+                <div class="slider-label"><span>Backlight Brightness</span><span id="val-blBright">1.0</span></div>
+                <input type="range" id="blBright" min="0.0" max="5.0" step="0.1" value="1.0">
+            </div>
+        </div>
+
+        <!-- Physics Config -->
+        <div class="section-header collapsed" onclick="toggleSection(this)">Physics Props</div>
+        <div class="section-content collapsed">
+            <div class="slider-container">
+                <div class="slider-label">
+                    <span>Particle Count</span>
+                    <span id="val-count">4096</span>
+                </div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <input type="range" id="texSize" min="32" max="128" step="32" value="64" style="flex-grow:1;">
+                    <input type="number" id="custom-tex" class="num-input" value="64">
+                </div>
+                <div class="checkbox-row">
+                    <input type="checkbox" id="extreme-mode">
+                    <label for="extreme-mode">Enable Extreme Mode (Max 65k)</label>
+                </div>
+                <div class="stat-box" style="text-align:left; margin:0; font-size:0.65rem;">Changing this resets simulation</div>
+            </div>
+            <div class="slider-container">
+                <div class="slider-label"><span>Gravity</span><span id="val-gravity">60</span></div>
+                <input type="range" id="gravity" min="0" max="150" step="5" value="60">
+            </div>
+            <div class="slider-container">
+                <div class="slider-label"><span>Viscosity</span><span id="val-visc">0.03</span></div>
+                <input type="range" id="visc" min="0" max="0.5" step="0.001" value="0.03">
+            </div>
+            <div class="slider-container">
+                <div class="slider-label"><span>Pressure</span><span id="val-pressure">1.0</span></div>
+                <input type="range" id="pressure" min="0.1" max="5.0" step="0.1" value="1.0">
+            </div>
+            <div class="slider-container">
+                <div class="slider-label"><span>Interaction Radius</span><span id="val-radius">0.03</span></div>
+                <input type="range" id="radius" min="0.02" max="0.06" step="0.001" value="0.03">
+            </div>
+            
+            <div class="checkbox-row">
+                <input type="checkbox" id="tension">
+                <label for="tension" style="color:#fbbf24;">Enable Surface Tension (Physics)</label>
+            </div>
+        </div>
+
+        <div style="display:flex; gap:8px; margin-top:10px;">
+            <button class="btn" id="reset-btn" style="margin-top:0;">Reset Sim</button>
+            <button class="btn secondary" id="defaults-btn" style="margin-top:0;">Reset to Defaults</button>
+        </div>
+        
+        <div class="stat-box">
+            FPS: <span id="fps">60</span><br>
+            <span style="font-size: 0.7em; opacity: 0.7;">Particles: <span id="real-count">4096</span> | Objects: <span id="obj-count">0</span></span>
+        </div>
+    </div>
+
+    <canvas id="glCanvas"></canvas>
+
+<!-- ================= SHADERS ================= -->
+
+<script type="x-shader/x-vertex" id="vert-quad">
+#version 300 es
+in vec4 a_position;
+void main() { gl_Position = a_position; }
+</script>
+
+<script type="x-shader/x-fragment" id="frag-density">
+#version 300 es
+precision highp float;
+uniform sampler2D u_posTex;
+uniform float u_radius;
+uniform float u_count;
+out vec4 outDensity;
+void main() {
+    vec2 uv = gl_FragCoord.xy / u_count;
+    vec3 myPos = texture(u_posTex, uv).xyz;
+    float density = 0.0;
+    float h2 = u_radius * u_radius;
+    for (float y = 0.0; y < u_count; y++) {
+        for (float x = 0.0; x < u_count; x++) {
+            vec3 nPos = texture(u_posTex, vec2(x+0.5, y+0.5)/u_count).xyz;
+            vec3 diff = myPos - nPos;
+            float r2 = dot(diff, diff);
+            if (r2 < h2) {
+                float term = h2 - r2;
+                density += term * term * term;
+            }
+        }
+    }
+    outDensity = vec4(density, 0.0, 0.0, 1.0);
+}
+</script>
+
+<script type="x-shader/x-fragment" id="frag-velocity">
+#version 300 es
+precision highp float;
+
+uniform sampler2D u_posTex;
+uniform sampler2D u_velTex;
+uniform sampler2D u_densityTex;
+
+uniform float u_count;
+uniform float u_radius;
+uniform float u_dt;
+uniform float u_gravity;
+uniform float u_viscosity;
+uniform float u_pressureM;
+uniform bool u_tension; 
+
+uniform vec4 u_mouse; 
+uniform int u_toolMode; 
+uniform int u_handMode; 
+
+#define MAX_OBSTACLES 20
+uniform int u_obsCount;
+uniform vec3 u_obstacles[MAX_OBSTACLES]; 
+
+out vec4 outVelocity;
+
+void main() {
+    vec2 uv = gl_FragCoord.xy / u_count;
+    vec3 pos = texture(u_posTex, uv).xyz;
+    vec3 vel = texture(u_velTex, uv).xyz;
+    float myDensity = texture(u_densityTex, uv).x;
+    
+    float restDensity = 300.0 * pow(u_radius, 4.0) * u_count; 
+    float myPressure = max(0.0, (myDensity - restDensity) * u_pressureM);
+
+    vec2 force = vec2(0.0, 0.0);
+    float h = u_radius;
+    float h2 = h * h;
+
+    for (float y = 0.0; y < u_count; y++) {
+        for (float x = 0.0; x < u_count; x++) {
+            vec2 nUV = vec2(x+0.5, y+0.5)/u_count;
+            vec3 nPos = texture(u_posTex, nUV).xyz;
+            vec3 diff = pos - nPos;
+            float r2 = dot(diff, diff);
+            
+            if (r2 > 0.000001 && r2 < h2) {
+                float r = sqrt(r2);
+                vec2 dir = diff.xy / r;
+                
+                float nDensity = texture(u_densityTex, nUV).x;
+                float nPressure = max(0.0, (nDensity - restDensity) * u_pressureM);
+                
+                float term = h - r;
+                float pForce = (myPressure + nPressure) * term * term; 
+                force += dir * pForce; 
+
+                vec3 nVel = texture(u_velTex, nUV).xyz;
+                force += (nVel.xy - vel.xy) * u_viscosity * 600.0 * term;
+                
+                if (r < h * 0.4) force += dir * (h*0.4 - r) * 5000.0;
+                
+                // Surface Tension
+                if (u_tension && r > h * 0.5) {
+                    float coh = (1.0 - r/h);
+                    force -= dir * coh * coh * 15.0; 
+                }
+            }
+        }
+    }
+    
+    force.y -= u_gravity;
+
+    // Hand Tool
+    if (u_toolMode == 0 && u_mouse.z > 0.5) {
+        vec2 mDiff = pos.xy - u_mouse.xy;
+        float mDist = length(mDiff);
+        float range = 0.06; 
+        if (mDist < range) {
+            float strength = (1.0 - mDist/range) * 1200.0;
+            vec2 dir = normalize(mDiff);
+            
+            if (u_handMode == 0) { 
+                strength *= -1.0; 
+                force -= vel.xy * 5.0; 
+            }
+            
+            force += dir * strength;
+        }
+    }
+    
+    if (u_toolMode == 2 && u_mouse.z > 0.5) {
+        vec2 mDiff = pos.xy - u_mouse.xy;
+        float mDist = length(mDiff);
+        float range = 0.08;
+        if (mDist < range) {
+             vec2 dir = normalize(mDiff);
+             vel.xy += dir * 500.0 * u_dt; 
+        }
+    }
+
+    for(int i=0; i<MAX_OBSTACLES; i++) {
+        if (i >= u_obsCount) break;
+        vec3 obs = u_obstacles[i]; 
+        vec2 oDiff = pos.xy - obs.xy;
+        float oDist = length(oDiff);
+        float combinedRadius = obs.z + 0.005; 
+        
+        if (oDist < combinedRadius) {
+            vec2 normal = oDiff / oDist;
+            force += normal * (combinedRadius - oDist) * 20000.0;
+            vel.xy *= 0.9;
+        }
+    }
+    
+    if (length(force) > 1000.0) force = normalize(force) * 1000.0;
+    
+    vel.xy += force * u_dt;
+    vel.xy *= 0.995; 
+
+    float b = 0.01;
+    if (pos.y < b) { vel.y = abs(vel.y) * 0.5; } 
+    if (pos.y > 1.0 - b) { vel.y = -abs(vel.y) * 0.5; } 
+    if (pos.x < b) { vel.x = abs(vel.x) * 0.5; } 
+    if (pos.x > (u_mouse.w - b)) { vel.x = -abs(vel.x) * 0.5; } 
+
+    if (length(vel.xy) > 10.0) vel.xy = normalize(vel.xy) * 10.0;
+
+    outVelocity = vec4(vel, 1.0);
+}
+</script>
+
+<script type="x-shader/x-fragment" id="frag-position">
+#version 300 es
+precision highp float;
+uniform sampler2D u_posTex;
+uniform sampler2D u_velTex;
+uniform float u_dt;
+uniform float u_count;
+uniform vec2 u_aspect;
+out vec4 outPos;
+void main() {
+    vec2 uv = gl_FragCoord.xy / u_count;
+    vec3 pos = texture(u_posTex, uv).xyz;
+    vec3 vel = texture(u_velTex, uv).xyz;
+    pos += vel * u_dt;
+    pos.x = clamp(pos.x, 0.0, u_aspect.x);
+    pos.y = clamp(pos.y, 0.0, 1.0);
+    outPos = vec4(pos, 1.0);
+}
+</script>
+
+<script type="x-shader/x-vertex" id="vert-render">
+#version 300 es
+in vec2 a_uv; 
+uniform sampler2D u_posTex;
+uniform sampler2D u_velTex;
+uniform sampler2D u_densityTex;
+uniform vec2 u_aspect;
+uniform float u_pointSizeScale;
+uniform float u_radius;
+out vec3 v_vel;
+out float v_density;
+void main() {
+    vec4 pos = texture(u_posTex, a_uv);
+    v_vel = texture(u_velTex, a_uv).xyz;
+    v_density = texture(u_densityTex, a_uv).x;
+
+    float x = (pos.x / u_aspect.x) * 2.0 - 1.0;
+    float y = pos.y * 2.0 - 1.0;
+
+    gl_Position = vec4(x, y, 0.0, 1.0);
+    gl_PointSize = (u_radius * 800.0) * u_pointSizeScale * (1.0/u_aspect.x); 
+}
+</script>
+
+<script type="x-shader/x-fragment" id="frag-render">
+#version 300 es
+precision mediump float;
+in vec3 v_vel;
+in float v_density;
+
+uniform int u_colorMode; 
+uniform float u_opacity;
+uniform float u_brightness;
+uniform float u_glow;
+uniform float u_hueShift;
+
+out vec4 outColor;
+
+vec3 rgb2hsv(vec3 c) {
+    vec4 K = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
+    vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));
+    vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r));
+
+    float d = q.x - min(q.w, q.y);
+    float e = 1.0e-10;
+    return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x);
+}
+
+vec3 hsv2rgb(vec3 c) {
+    vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+void main() {
+    vec2 coord = gl_PointCoord - vec2(0.5);
+    float dist = length(coord);
+    if (dist > 0.5) discard;
+    
+    float edgeStart = 0.45 - u_glow; 
+    float alpha = 1.0 - smoothstep(edgeStart, 0.5, dist);
+    
+    vec3 color;
+    if (u_colorMode == 0) {
+        float speed = length(v_vel);
+        float t = clamp(speed * 0.3, 0.0, 1.0);
+        color = mix(vec3(0.22, 0.74, 0.97), vec3(1.0, 0.9, 0.4), t);
+        if (t > 0.8) color = vec3(1.0, 1.0, 0.8);
+    } else {
+        float d = v_density * 0.00005; 
+        color = mix(vec3(0.05, 0.1, 0.3), vec3(0.2, 0.6, 1.0), clamp(d, 0.0, 1.0));
+    }
+    
+    if (u_hueShift > 0.0) {
+        vec3 hsv = rgb2hsv(color);
+        hsv.x = fract(hsv.x + u_hueShift);
+        color = hsv2rgb(hsv);
+    }
+    
+    outColor = vec4(color * u_brightness, alpha * u_opacity);
+}
+</script>
+
+<script type="x-shader/x-fragment" id="frag-fade">
+#version 300 es
+precision mediump float;
+uniform sampler2D u_tex;
+uniform float u_decay;
+out vec4 outColor;
+void main() {
+    vec4 c = texture(u_tex, gl_FragCoord.xy / vec2(textureSize(u_tex, 0)));
+    outColor = vec4(c.rgb * u_decay, c.a * u_decay); 
+}
+</script>
+
+<script type="x-shader/x-fragment" id="frag-composite">
+#version 300 es
+precision mediump float;
+uniform sampler2D u_trailTex;
+uniform vec2 u_aspect;
+uniform bool u_backlight; 
+uniform float u_backlightBrightness;
+uniform bool u_bgGradient; 
+uniform bool u_blobs; 
+
+#define MAX_OBSTACLES 20
+uniform int u_obsCount;
+uniform vec3 u_obstacles[MAX_OBSTACLES]; 
+
+out vec4 outColor;
+void main() {
+    vec2 texSize = vec2(textureSize(u_trailTex, 0));
+    vec2 uv = gl_FragCoord.xy / texSize;
+    vec4 c = texture(u_trailTex, uv);
+    
+    // --- Background ---
+    vec3 bgColor = vec3(0.0);
+    if (u_bgGradient) {
+        float distFromCenter = length(uv - 0.5);
+        bgColor = mix(vec3(0.05, 0.08, 0.15), vec3(0.0), smoothstep(0.0, 0.8, distFromCenter));
+    }
+    
+    // --- Backlight ---
+    vec3 backlight = vec3(0.0);
+    if (u_backlight) {
+        vec2 offset = 2.0 / texSize;
+        vec3 blur = texture(u_trailTex, uv).rgb;
+        blur += texture(u_trailTex, uv + vec2(offset.x, 0.0)).rgb;
+        blur += texture(u_trailTex, uv - vec2(offset.x, 0.0)).rgb;
+        blur += texture(u_trailTex, uv + vec2(0.0, offset.y)).rgb;
+        blur += texture(u_trailTex, uv - vec2(0.0, offset.y)).rgb;
+        blur /= 5.0;
+        backlight = blur * 0.5 * u_backlightBrightness; 
+    }
+
+    // --- Blob / Metaball Logic ---
+    vec3 fluidColor = c.rgb;
+    float fluidAlpha = c.a;
+    
+    if (u_blobs) {
+        float blobDensity = fluidAlpha * 5.0; 
+        float threshold = 0.8;
+        float edge = smoothstep(threshold - 0.1, threshold, blobDensity);
+        fluidAlpha = edge;
+        fluidColor = c.rgb * 2.0; 
+    }
+
+    vec2 worldPos = vec2(uv.x * u_aspect.x, uv.y);
+    vec3 obsColor = vec3(0.0);
+    float obsAlpha = 0.0;
+    
+    for(int i=0; i<MAX_OBSTACLES; i++){
+        if(i >= u_obsCount) break;
+        float dist = distance(worldPos, u_obstacles[i].xy);
+        if(dist < u_obstacles[i].z){
+            float edge = smoothstep(u_obstacles[i].z, u_obstacles[i].z - 0.002, dist);
+            obsColor = vec3(0.6, 0.6, 0.6); 
+            obsAlpha = max(obsAlpha, edge);
+        }
+    }
+    
+    vec3 finalColor = bgColor;
+    
+    // Apply backlight behind fluid
+    finalColor += backlight * (1.0 - fluidAlpha);
+    
+    // Apply Fluid (Additive/Premultiplied Logic)
+    if (u_blobs) {
+        // For blobs, we reconstructed alpha, so we use standard mix
+          finalColor = mix(finalColor, fluidColor, fluidAlpha);
+    } else {
+        // For standard particles, texture is premultiplied by blend function
+        // Formula: fluidColor (premultiplied) + bgColor * (1 - alpha)
+        finalColor = fluidColor + finalColor * (1.0 - fluidAlpha);
+    }
+
+    // Apply Obstacles on top
+    finalColor = mix(finalColor, obsColor, obsAlpha); 
+    
+    outColor = vec4(finalColor, 1.0);
+}
+</script>
+
+<script>
+const canvas = document.getElementById('glCanvas');
+const gl = canvas.getContext('webgl2', { alpha: false });
+
+if (!gl || !gl.getExtension("EXT_color_buffer_float")) {
+    alert("WebGL 2 + Floating Point Textures Required");
+}
+
+// -- DEFAULTS CONSTANTS --
+const DEFAULTS = {
+    texSize: 64,
+    gravity: 60,
+    viscosity: 0.03,
+    pressureM: 1.0,
+    radius: 0.03,
+    trailDecay: 0.0, 
+    colorMode: 1,   
+    pointSizeScale: 1.5, 
+    opacity: 0.5,   
+    brightness: 2.5, 
+    glow: 0.1,
+    hue: 0,
+    handMode: 1, 
+    backlight: false,
+    backlightBrightness: 1.0,
+    bgGradient: true,
+    blobs: false,
+    tension: false
+};
+
+const STATE = { ...DEFAULTS,
+    count: 4096,
+    tool: 0, 
+    mouse: { x: 0, y: 0, isDown: false },
+    obstacles: [] 
+};
+
+let width, height, aspectX;
+let progDensity, progVel, progPos, progRender, progFade, progComposite;
+let bufPos, bufVel, bufDensity, bufTrails;
+let quadVao, particlesVao;
+let uObsArray = new Float32Array(20 * 3); 
+
+function createShader(type, src) {
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src);
+    gl.compileShader(s);
+    if(!gl.getShaderParameter(s, gl.COMPILE_STATUS)) console.error(gl.getShaderInfoLog(s));
+    return s;
+}
+
+function createProgram(vsId, fsId) {
+    const p = gl.createProgram();
+    gl.attachShader(p, createShader(gl.VERTEX_SHADER, document.getElementById(vsId).textContent.trim()));
+    gl.attachShader(p, createShader(gl.FRAGMENT_SHADER, document.getElementById(fsId).textContent.trim()));
+    gl.linkProgram(p);
+    return p;
+}
+
+function createDoubleFBO(size) {
+    let bufs = [];
+    for (let i=0; i<2; i++) {
+        const tex = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, tex);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, size, size, 0, gl.RGBA, gl.FLOAT, null);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        
+        const fbo = gl.createFramebuffer();
+        gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+        bufs.push({tex, fbo});
+    }
+    return { read: bufs[0], write: bufs[1], swap: function(){ [this.read, this.write] = [this.write, this.read]; }};
+}
+
+function createTrailFBO(w, h) {
+    let bufs = [];
+    for (let i=0; i<2; i++) {
+        const tex = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, tex);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        const fbo = gl.createFramebuffer();
+        gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+        bufs.push({tex, fbo});
+    }
+    return { read: bufs[0], write: bufs[1], swap: function(){ [this.read, this.write] = [this.write, this.read]; }};
+}
+
+function initGL() {
+    progDensity = createProgram('vert-quad', 'frag-density');
+    progVel = createProgram('vert-quad', 'frag-velocity');
+    progPos = createProgram('vert-quad', 'frag-position');
+    progRender = createProgram('vert-render', 'frag-render');
+    progFade = createProgram('vert-quad', 'frag-fade');
+    progComposite = createProgram('vert-quad', 'frag-composite');
+
+    const qBuf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, qBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+    quadVao = gl.createVertexArray();
+    gl.bindVertexArray(quadVao);
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+
+    resize();
+    initParticles(STATE.texSize);
+}
+
+function initParticles(size) {
+    STATE.texSize = size;
+    STATE.count = size * size;
+    document.getElementById('real-count').innerText = STATE.count;
+    
+    bufPos = createDoubleFBO(size);
+    bufVel = createDoubleFBO(size);
+    
+    const denTex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, denTex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, size, size, 0, gl.RGBA, gl.FLOAT, null);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    const denFbo = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, denFbo);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, denTex, 0);
+    bufDensity = { tex: denTex, fbo: denFbo };
+
+    const posData = new Float32Array(size * size * 4);
+    const velData = new Float32Array(size * size * 4);
+    
+    const cols = Math.floor(size);
+    const spacing = 0.015;
+    const startX = (aspectX - (cols * spacing)) / 2;
+    
+    for(let i=0; i<STATE.count; i++) {
+        const x = i % size;
+        const y = Math.floor(i / size);
+        posData[i*4 + 0] = startX + x * spacing + Math.random()*0.001;
+        posData[i*4 + 1] = 0.6 + y * spacing + Math.random()*0.001;
+        posData[i*4 + 2] = 0; posData[i*4 + 3] = 1;
+        velData[i*4 + 0] = (Math.random()-0.5)*0.2;
+        velData[i*4 + 1] = (Math.random()-0.5)*0.2;
+    }
+    
+    gl.bindTexture(gl.TEXTURE_2D, bufPos.read.tex);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, size, size, gl.RGBA, gl.FLOAT, posData);
+    gl.bindTexture(gl.TEXTURE_2D, bufVel.read.tex);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, size, size, gl.RGBA, gl.FLOAT, velData);
+
+    const uvs = new Float32Array(STATE.count * 2);
+    for(let y=0; y<size; y++){
+        for(let x=0; x<size; x++){
+            const i = y*size+x;
+            uvs[i*2+0] = (x+0.5)/size;
+            uvs[i*2+1] = (y+0.5)/size;
+        }
+    }
+    const uvBuf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, uvBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, uvs, gl.STATIC_DRAW);
+    particlesVao = gl.createVertexArray();
+    gl.bindVertexArray(particlesVao);
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+}
+
+function resize() {
+    width = window.innerWidth;
+    height = window.innerHeight;
+    canvas.width = width;
+    canvas.height = height;
+    aspectX = width / height;
+    gl.viewport(0, 0, width, height);
+    bufTrails = createTrailFBO(width, height);
+}
+
+function step(time) {
+    STATE.obstacles.forEach(b => {
+        b.vy -= STATE.gravity * 0.000005; 
+        b.x += b.vx;
+        b.y += b.vy;
+        if(b.y < b.radius) { b.y = b.radius; b.vy *= -0.5; b.vx *= 0.9; }
+        if(b.x < b.radius) { b.x = b.radius; b.vx *= -0.5; }
+        if(b.x > aspectX - b.radius) { b.x = aspectX - b.radius; b.vx *= -0.5; }
+    });
+    
+    for(let i=0; i<20; i++){
+        if(i < STATE.obstacles.length) {
+            uObsArray[i*3 + 0] = STATE.obstacles[i].x;
+            uObsArray[i*3 + 1] = STATE.obstacles[i].y;
+            uObsArray[i*3 + 2] = STATE.obstacles[i].radius;
+        } else {
+            uObsArray[i*3 + 2] = 0; 
+        }
+    }
+    
+    gl.disable(gl.BLEND);
+    const steps = 2; 
+    for(let i=0; i<steps; i++) {
+        gl.useProgram(progDensity);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, bufDensity.fbo);
+        gl.viewport(0, 0, STATE.texSize, STATE.texSize);
+        gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, bufPos.read.tex);
+        gl.uniform1i(gl.getUniformLocation(progDensity, 'u_posTex'), 0);
+        gl.uniform1f(gl.getUniformLocation(progDensity, 'u_radius'), STATE.radius);
+        gl.uniform1f(gl.getUniformLocation(progDensity, 'u_count'), STATE.texSize);
+        gl.bindVertexArray(quadVao);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+        
+        gl.useProgram(progVel);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, bufVel.write.fbo);
+        gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, bufPos.read.tex);
+        gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, bufVel.read.tex);
+        gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, bufDensity.tex);
+        gl.uniform1i(gl.getUniformLocation(progVel, 'u_posTex'), 0);
+        gl.uniform1i(gl.getUniformLocation(progVel, 'u_velTex'), 1);
+        gl.uniform1i(gl.getUniformLocation(progVel, 'u_densityTex'), 2);
+        gl.uniform1f(gl.getUniformLocation(progVel, 'u_count'), STATE.texSize);
+        gl.uniform1f(gl.getUniformLocation(progVel, 'u_radius'), STATE.radius);
+        gl.uniform1f(gl.getUniformLocation(progVel, 'u_dt'), 0.005);
+        gl.uniform1f(gl.getUniformLocation(progVel, 'u_gravity'), STATE.gravity * 0.01);
+        gl.uniform1f(gl.getUniformLocation(progVel, 'u_viscosity'), STATE.viscosity);
+        gl.uniform1f(gl.getUniformLocation(progVel, 'u_pressureM'), STATE.pressureM);
+        gl.uniform4f(gl.getUniformLocation(progVel, 'u_mouse'), STATE.mouse.x, STATE.mouse.y, STATE.mouse.isDown ? 1.0 : 0.0, aspectX);
+        gl.uniform1i(gl.getUniformLocation(progVel, 'u_toolMode'), STATE.tool);
+        gl.uniform1i(gl.getUniformLocation(progVel, 'u_handMode'), STATE.handMode);
+        gl.uniform1i(gl.getUniformLocation(progVel, 'u_obsCount'), STATE.obstacles.length);
+        gl.uniform3fv(gl.getUniformLocation(progVel, 'u_obstacles'), uObsArray);
+        // TENSION
+        gl.uniform1i(gl.getUniformLocation(progVel, 'u_tension'), STATE.tension ? 1 : 0);
+        
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+        bufVel.swap();
+        
+        gl.useProgram(progPos);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, bufPos.write.fbo);
+        gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, bufPos.read.tex);
+        gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, bufVel.read.tex);
+        gl.uniform1i(gl.getUniformLocation(progPos, 'u_posTex'), 0);
+        gl.uniform1i(gl.getUniformLocation(progPos, 'u_velTex'), 1);
+        gl.uniform1f(gl.getUniformLocation(progPos, 'u_dt'), 0.005);
+        gl.uniform1f(gl.getUniformLocation(progPos, 'u_count'), STATE.texSize);
+        gl.uniform2f(gl.getUniformLocation(progPos, 'u_aspect'), aspectX, 1.0);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+        bufPos.swap();
+    }
+    
+    gl.bindFramebuffer(gl.FRAMEBUFFER, bufTrails.write.fbo);
+    gl.viewport(0, 0, width, height);
+    gl.useProgram(progFade);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, bufTrails.read.tex);
+    gl.uniform1i(gl.getUniformLocation(progFade, 'u_tex'), 0);
+    gl.uniform1f(gl.getUniformLocation(progFade, 'u_decay'), STATE.trailDecay);
+    gl.bindVertexArray(quadVao);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); 
+    
+    gl.useProgram(progRender);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, bufPos.read.tex);
+    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, bufVel.read.tex);
+    gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, bufDensity.tex);
+    gl.uniform1i(gl.getUniformLocation(progRender, 'u_posTex'), 0);
+    gl.uniform1i(gl.getUniformLocation(progRender, 'u_velTex'), 1);
+    gl.uniform1i(gl.getUniformLocation(progRender, 'u_densityTex'), 2);
+    gl.uniform2f(gl.getUniformLocation(progRender, 'u_aspect'), aspectX, 1.0);
+    gl.uniform1f(gl.getUniformLocation(progRender, 'u_pointSizeScale'), STATE.pointSizeScale);
+    gl.uniform1f(gl.getUniformLocation(progRender, 'u_radius'), STATE.radius);
+    gl.uniform1i(gl.getUniformLocation(progRender, 'u_colorMode'), STATE.colorMode);
+    
+    gl.uniform1f(gl.getUniformLocation(progRender, 'u_opacity'), STATE.opacity);
+    gl.uniform1f(gl.getUniformLocation(progRender, 'u_brightness'), STATE.brightness);
+    gl.uniform1f(gl.getUniformLocation(progRender, 'u_glow'), STATE.glow);
+    gl.uniform1f(gl.getUniformLocation(progRender, 'u_hueShift'), STATE.hue / 360.0); 
+    
+    gl.bindVertexArray(particlesVao);
+    gl.drawArrays(gl.POINTS, 0, STATE.count);
+    bufTrails.swap();
+    
+    gl.disable(gl.BLEND);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.useProgram(progComposite);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, bufTrails.read.tex);
+    gl.uniform1i(gl.getUniformLocation(progComposite, 'u_trailTex'), 0);
+    gl.uniform2f(gl.getUniformLocation(progComposite, 'u_aspect'), aspectX, 1.0);
+    gl.uniform1i(gl.getUniformLocation(progComposite, 'u_obsCount'), STATE.obstacles.length);
+    gl.uniform3fv(gl.getUniformLocation(progComposite, 'u_obstacles'), uObsArray);
+    // BACKLIGHT & BLOBS & BG
+    gl.uniform1i(gl.getUniformLocation(progComposite, 'u_backlight'), STATE.backlight ? 1 : 0);
+    gl.uniform1f(gl.getUniformLocation(progComposite, 'u_backlightBrightness'), STATE.backlightBrightness);
+    gl.uniform1i(gl.getUniformLocation(progComposite, 'u_bgGradient'), STATE.bgGradient ? 1 : 0);
+    gl.uniform1i(gl.getUniformLocation(progComposite, 'u_blobs'), STATE.blobs ? 1 : 0);
+    
+    gl.bindVertexArray(quadVao);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+    calcFPS(time);
+    requestAnimationFrame(step);
+}
+
+let lastTime = 0;
+let frames = 0;
+function calcFPS(time) {
+    if(time - lastTime >= 1000) {
+        document.getElementById('fps').innerText = frames;
+        frames = 0; lastTime = time;
+    }
+    frames++;
+}
+
+function updateMouse(cx, cy) {
+    STATE.mouse.x = (cx / width) * aspectX;
+    STATE.mouse.y = 1.0 - (cy / height);
+}
+
+function handleStart(cx, cy) {
+    updateMouse(cx, cy);
+    if(STATE.tool === 1) { 
+        if(STATE.obstacles.length < 20) {
+            STATE.obstacles.push({
+                x: STATE.mouse.x, 
+                y: STATE.mouse.y, 
+                radius: 0.05 + Math.random()*0.05,
+                vx: 0,
+                vy: 0
+            });
+            document.getElementById('obj-count').innerText = STATE.obstacles.length;
+        }
+    } else {
+        STATE.mouse.isDown = true;
+    }
+}
+
+window.addEventListener('mousemove', e => updateMouse(e.clientX, e.clientY));
+canvas.addEventListener('mousedown', e => {
+    if(e.button === 0) handleStart(e.clientX, e.clientY);
+});
+window.addEventListener('mouseup', () => STATE.mouse.isDown = false);
+
+canvas.addEventListener('touchstart', e => {
+    e.preventDefault(); 
+    const t = e.touches[0];
+    handleStart(t.clientX, t.clientY);
+}, {passive: false});
+
+canvas.addEventListener('touchmove', e => {
+    e.preventDefault();
+    const t = e.touches[0];
+    updateMouse(t.clientX, t.clientY);
+}, {passive: false});
+
+canvas.addEventListener('touchend', e => {
+    e.preventDefault();
+    STATE.mouse.isDown = false;
+});
+
+window.addEventListener('resize', () => { resize(); initParticles(STATE.texSize); });
+
+function bind(id, key, type='float') {
+    const el = document.getElementById(id);
+    if (!el) return;
+    
+    el.addEventListener('input', e => {
+        let v = parseFloat(e.target.value);
+        STATE[key] = v;
+        const display = document.getElementById('val-' + id);
+        if(display) {
+             if(type === 'int') display.innerText = Math.floor(v);
+             else if (id === 'brightness') display.innerText = Math.round(v * 20) + '%'; 
+             else display.innerText = v;
+        }
+    });
+}
+
+bind('gravity', 'gravity');
+bind('visc', 'viscosity');
+bind('pressure', 'pressureM');
+bind('radius', 'radius');
+bind('trail', 'trailDecay');
+bind('pSize', 'pointSizeScale');
+bind('opacity', 'opacity');
+bind('brightness', 'brightness');
+bind('glow', 'glow');
+bind('hue', 'hue', 'int');
+bind('blBright', 'backlightBrightness');
+
+const sliderTex = document.getElementById('texSize');
+const inputTex = document.getElementById('custom-tex');
+const extremeCheck = document.getElementById('extreme-mode');
+
+function updateParticleCount(val) {
+    const max = extremeCheck.checked ? 256 : 128;
+    if(val > max) val = max;
+    if(val < 32) val = 32;
+    
+    sliderTex.value = val;
+    inputTex.value = val;
+    
+    initParticles(val);
+    document.getElementById('val-count').innerText = STATE.count;
+}
+
+sliderTex.addEventListener('input', e => updateParticleCount(parseInt(e.target.value)));
+inputTex.addEventListener('change', e => updateParticleCount(parseInt(e.target.value)));
+
+extremeCheck.addEventListener('change', e => {
+    const isExtreme = e.target.checked;
+    sliderTex.max = isExtreme ? 256 : 128;
+    if(!isExtreme && parseInt(sliderTex.value) > 128) {
+        updateParticleCount(128);
+    }
+});
+
+document.getElementById('reset-btn').addEventListener('click', () => {
+    initParticles(STATE.texSize);
+    STATE.obstacles = [];
+    document.getElementById('obj-count').innerText = 0;
+});
+
+document.getElementById('defaults-btn').addEventListener('click', () => {
+    Object.assign(STATE, DEFAULTS);
+    
+    const uiMap = {
+        'trail': DEFAULTS.trailDecay,
+        'pSize': DEFAULTS.pointSizeScale,
+        'opacity': DEFAULTS.opacity,
+        'brightness': DEFAULTS.brightness,
+        'visMode': DEFAULTS.colorMode,
+        'blBright': DEFAULTS.backlightBrightness,
+        'hue': DEFAULTS.hue
+    };
+    
+    for(let [id, val] of Object.entries(uiMap)) {
+        const el = document.getElementById(id);
+        if(el) el.value = val;
+        
+        const disp = document.getElementById('val-' + id);
+        if(disp) disp.innerText = val;
+    }
+    
+    document.getElementById('val-brightness').innerText = Math.round(DEFAULTS.brightness * 20) + '%';
+    
+    setTool('hand');
+    document.getElementById('mode-btn').innerText = "Hand Mode: Repel";
+    
+    document.getElementById('backlight').checked = DEFAULTS.backlight;
+    document.getElementById('bgGradient').checked = DEFAULTS.bgGradient;
+    document.getElementById('blobs').checked = DEFAULTS.blobs;
+    document.getElementById('tension').checked = DEFAULTS.tension;
+    
+    const bgGroup = document.getElementById('backlight-slider-group');
+    if(bgGroup) bgGroup.style.cssText = DEFAULTS.backlight ? "opacity: 1; pointer-events: auto;" : "opacity: 0.5; pointer-events: none;";
+
+    initParticles(STATE.texSize);
+});
+
+// Toggles
+document.getElementById('backlight').addEventListener('change', e => {
+    STATE.backlight = e.target.checked;
+    const bgGroup = document.getElementById('backlight-slider-group');
+    if(bgGroup) {
+        bgGroup.style.cssText = e.target.checked ? "opacity: 1; pointer-events: auto;" : "opacity: 0.5; pointer-events: none;";
+    }
+});
+document.getElementById('bgGradient').addEventListener('change', e => STATE.bgGradient = e.target.checked);
+document.getElementById('blobs').addEventListener('change', e => STATE.blobs = e.target.checked);
+document.getElementById('tension').addEventListener('change', e => STATE.tension = e.target.checked);
+
+document.getElementById('visMode').addEventListener('change', e => {
+    STATE.colorMode = parseInt(e.target.value);
+});
+
+window.toggleSection = function(header) {
+    header.classList.toggle('collapsed');
+    header.nextElementSibling.classList.toggle('collapsed');
+}
+
+window.setTool = function(name) {
+    document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('selected'));
+    document.getElementById('tool-'+name).classList.add('selected');
+    document.getElementById('ball-controls').style.display = name === 'ball' ? 'block' : 'none';
+    document.getElementById('mode-btn').style.display = name === 'hand' ? 'block' : 'none';
+    
+    if(name === 'hand') STATE.tool = 0;
+    if(name === 'ball') STATE.tool = 1;
+    if(name === 'brush') STATE.tool = 2;
+}
+
+document.getElementById('mode-btn').addEventListener('click', function() {
+    STATE.handMode = STATE.handMode === 0 ? 1 : 0;
+    this.innerText = STATE.handMode === 0 ? "Hand Mode: Attract" : "Hand Mode: Repel";
+});
+
+document.getElementById('menu-toggle').addEventListener('click', () => {
+    document.getElementById('controls').classList.toggle('hidden-panel');
+});
+
+initGL();
+requestAnimationFrame(step);
+
+</script>
+</body>
+</html>
